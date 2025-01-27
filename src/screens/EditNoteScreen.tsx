@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
-import { TextInput, FAB, Portal, Dialog, Button } from 'react-native-paper';
+import { TextInput, FAB, Portal, Dialog, Button, Text } from 'react-native-paper';
 import database from '@react-native-firebase/database';
 import auth from '@react-native-firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNFS from 'react-native-fs';
 import { PDFDocument } from 'react-native-pdf';
+import { logger } from '../utils/logger';
 
 export const EditNoteScreen = ({ route, navigation }) => {
   const [title, setTitle] = useState('');
@@ -16,7 +17,10 @@ export const EditNoteScreen = ({ route, navigation }) => {
 
   useEffect(() => {
     if (noteId) {
+      logger.debug('Loading existing note', { noteId });
       loadNote();
+    } else {
+      logger.debug('Creating new note');
     }
   }, [noteId]);
 
@@ -27,14 +31,16 @@ export const EditNoteScreen = ({ route, navigation }) => {
       if (notes[noteId]) {
         setTitle(notes[noteId].title);
         setContent(notes[noteId].content);
+        logger.info('Note loaded successfully', { noteId });
       }
     } catch (error) {
-      console.error('Error loading note:', error);
+      logger.error('Error loading note', error);
     }
   };
 
   const saveNote = async () => {
     try {
+      logger.debug('Saving note', { noteId, title });
       const newNote = {
         id: noteId || Date.now().toString(),
         title,
@@ -47,20 +53,23 @@ export const EditNoteScreen = ({ route, navigation }) => {
       const notes = JSON.parse(localNotes || '{}');
       notes[newNote.id] = newNote;
       await AsyncStorage.setItem(`notes_${userId}`, JSON.stringify(notes));
+      logger.info('Note saved locally', { noteId: newNote.id });
 
       // Save to Firebase
       await database()
         .ref(`notes/${userId}/${newNote.id}`)
         .set(newNote);
+      logger.info('Note synced to Firebase', { noteId: newNote.id });
 
       navigation.goBack();
     } catch (error) {
-      console.error('Error saving note:', error);
+      logger.error('Error saving note', error);
     }
   };
 
   const exportToPDF = async () => {
     try {
+      logger.debug('Starting PDF export', { noteId });
       const pdfDoc = await PDFDocument.create();
       const page = pdfDoc.addPage();
       
@@ -80,9 +89,10 @@ export const EditNoteScreen = ({ route, navigation }) => {
       const path = `${RNFS.DocumentDirectoryPath}/note_${noteId}.pdf`;
       
       await RNFS.writeFile(path, pdfBytes, 'base64');
+      logger.info('PDF exported successfully', { path });
       setShowExportDialog(true);
     } catch (error) {
-      console.error('Error exporting PDF:', error);
+      logger.error('Error exporting PDF', error);
     }
   };
 

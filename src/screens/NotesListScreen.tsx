@@ -4,6 +4,7 @@ import { FAB, List, Searchbar } from 'react-native-paper';
 import database from '@react-native-firebase/database';
 import auth from '@react-native-firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '../utils/logger';
 
 export const NotesListScreen = ({ navigation }) => {
   const [notes, setNotes] = useState([]);
@@ -13,14 +14,18 @@ export const NotesListScreen = ({ navigation }) => {
   useEffect(() => {
     loadNotes();
     setupRealtimeSync();
+    logger.info('NotesListScreen mounted', { userId });
   }, []);
 
   const loadNotes = async () => {
     try {
+      logger.debug('Loading notes', { userId });
+      
       // Load local notes
       const localNotes = await AsyncStorage.getItem(`notes_${userId}`);
       if (localNotes) {
         setNotes(JSON.parse(localNotes));
+        logger.info('Local notes loaded', { count: Object.keys(JSON.parse(localNotes)).length });
       }
       
       // Sync with Firebase if online
@@ -28,23 +33,27 @@ export const NotesListScreen = ({ navigation }) => {
         .ref(`notes/${userId}`)
         .once('value');
       const firebaseNotes = snapshot.val() || {};
+      logger.info('Firebase notes synced', { count: Object.keys(firebaseNotes).length });
       
       // Merge and save locally
       const mergedNotes = { ...JSON.parse(localNotes || '{}'), ...firebaseNotes };
       await AsyncStorage.setItem(`notes_${userId}`, JSON.stringify(mergedNotes));
       setNotes(Object.values(mergedNotes));
     } catch (error) {
-      console.error('Error loading notes:', error);
+      logger.error('Error loading notes', error);
     }
   };
 
   const setupRealtimeSync = () => {
+    logger.debug('Setting up realtime sync');
     database()
       .ref(`notes/${userId}`)
       .on('value', snapshot => {
         const firebaseNotes = snapshot.val() || {};
         setNotes(Object.values(firebaseNotes));
-        AsyncStorage.setItem(`notes_${userId}`, JSON.stringify(firebaseNotes));
+        AsyncStorage.setItem(`notes_${userId}`, JSON.stringify(firebaseNotes))
+          .then(() => logger.info('Notes synced and saved locally'))
+          .catch(error => logger.error('Error saving synced notes locally', error));
       });
   };
 
@@ -57,7 +66,10 @@ export const NotesListScreen = ({ navigation }) => {
     <View style={styles.container}>
       <Searchbar
         placeholder="Search notes"
-        onChangeText={setSearchQuery}
+        onChangeText={query => {
+          setSearchQuery(query);
+          logger.debug('Search query updated', { query });
+        }}
         value={searchQuery}
         style={styles.searchbar}
       />
@@ -68,7 +80,10 @@ export const NotesListScreen = ({ navigation }) => {
           <List.Item
             title={item.title}
             description={item.content.substring(0, 50) + '...'}
-            onPress={() => navigation.navigate('EditNote', { noteId: item.id })}
+            onPress={() => {
+              logger.debug('Note selected', { noteId: item.id });
+              navigation.navigate('EditNote', { noteId: item.id });
+            }}
             left={props => <List.Icon {...props} icon="note" />}
           />
         )}
@@ -76,7 +91,10 @@ export const NotesListScreen = ({ navigation }) => {
       <FAB
         style={styles.fab}
         icon="plus"
-        onPress={() => navigation.navigate('EditNote')}
+        onPress={() => {
+          logger.debug('Creating new note');
+          navigation.navigate('EditNote');
+        }}
       />
     </View>
   );

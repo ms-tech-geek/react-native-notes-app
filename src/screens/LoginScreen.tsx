@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { TextInput, Button, Text } from 'react-native-paper';
 import auth from '@react-native-firebase/auth';
+import { logger } from '../utils/logger';
 
 export const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -10,8 +11,11 @@ export const LoginScreen = ({ navigation }) => {
 
   const handleLogin = async () => {
     try {
+      logger.info('Login attempt', { email });
       await auth().signInWithEmailAndPassword(email, password);
+      logger.info('Login successful', { email });
     } catch (err) {
+      logger.error('Login failed', err);
       setError(err.message);
     }
   };
